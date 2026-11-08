@@ -53,7 +53,7 @@ else
     run 'Подключение i386' dpkg --add-architecture i386 || true
 fi
 if run 'Обновление индексов после i386' apt-get update; then
-    PKGS=(ca-certificates curl wget tar gzip sudo screen sqlite3 python3 acl lib32gcc-s1 lib32stdc++6 ufw fail2ban)
+    PKGS=(ca-certificates curl wget tar gzip sudo screen sqlite3 python3 acl lib32gcc-s1 lib32stdc++6 ufw fail2ban p7zip-full)
     if ! run 'Установка зависимостей' apt-get install -y "${PKGS[@]}"; then
         fail 'Зависимости недоступны, дальнейший деплой остановлен'; exit 1
     fi
@@ -240,9 +240,15 @@ fi
 install -d -o zomboid -g zomboid -m 755 /home/zomboid/Zomboid
 ok 'Каталог данных /home/zomboid/Zomboid готов'
 
+# Каталоги для импорта и бэкапов
+run 'Создание каталогов импорта и бэкапов' \
+    install -d -o zomboid -g zomboid -m 750 \
+    /home/zomboid/import /home/zomboid/backup || exit 1
+
 # Доступ операторов к данным Project Zomboid
 if setfacl -m u:pidor1:--x,u:pidor2:--x /home/zomboid \
    && setfacl -R -m u:pidor1:rwX,u:pidor2:rwX /home/zomboid/Zomboid \
+   && setfacl -m d:u:pidor1:rwx,d:u:pidor2:rwx /home/zomboid/import \
    && find /home/zomboid/Zomboid -type d \
       -exec setfacl -m d:u:pidor1:rwx,d:u:pidor2:rwx {} +; then
     ok 'Доступ pidor1 и pidor2 к данным Zomboid настроен'
