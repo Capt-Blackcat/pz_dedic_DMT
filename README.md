@@ -26,11 +26,6 @@ curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_deploy_script_DMT/
 ```
 Имя --name должно совпадать с именем мира внутри архива (ivent.ini, ivent.db, Multiplayer/ivent). Название архива может содержать дату, например `ivent_2026-11-11_14-30-00.tar.gz`.
 
-Если скрипты уже скачаны, запускай без curl: 
-```
-sudo bash deploy_zomboid.sh или sudo python3 pz_export.py --name ivent / sudo python3 pz_import.py --name ivent
-```
-
 ## Где что лежит
 ```
 /home/zomboid/
