@@ -246,9 +246,10 @@ run 'Создание каталогов импорта и бэкапов' \
     /home/zomboid/import /home/zomboid/backup || exit 1
 
 # Доступ операторов к данным Project Zomboid
-if setfacl -m u:pidor1:--x,u:pidor2:--x /home/zomboid \
+if setfacl -m u:pidor1:r-x,u:pidor2:r-x /home/zomboid \
    && setfacl -R -m u:pidor1:rwX,u:pidor2:rwX /home/zomboid/Zomboid \
    && setfacl -m u:pidor1:rwx,u:pidor2:rwx,d:u:pidor1:rwx,d:u:pidor2:rwx /home/zomboid/import \
+   && setfacl -m u:pidor1:rwx,u:pidor2:rwx,d:u:pidor1:rwx,d:u:pidor2:rwx /home/zomboid/backup \
    && find /home/zomboid/Zomboid -type d \
       -exec setfacl -m d:u:pidor1:rwx,d:u:pidor2:rwx {} +; then
     ok 'Доступ pidor1 и pidor2 к данным Zomboid настроен'
