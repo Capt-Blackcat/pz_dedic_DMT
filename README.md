@@ -1,59 +1,59 @@
-# pz_deploy_script_DMT
+Project Zomboid Dedicated: deploy / import / export
+Три скрипта: deploy_zomboid.sh (установка VPS), pz_import.py (восстановление/перенос мира), pz_export.py (бэкап мира). Примеры ниже для сервера ivent: замени имя на своё. Все команды запускаются через sudo.
+Быстрый запуск через GitHub
+Команды предполагают, что все три файла загружены в корень ветки main репозитория Capt-Blackcat/pz_deploy_script_DMT.
 
-Скрипт разового развёртывания выделенного сервера Project Zomboid на чистом VPS.
+1. Деплой VPS (однократно, сразу после получения нового сервера и SSH-доступа):
+curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_deploy_script_DMT/refs/heads/main/deploy_zomboid.sh -o /tmp/deploy_zomboid.sh && sudo bash /tmp/deploy_zomboid.sh
+Сразу после завершения деплоя обязательно проверь результат отдельной командой:
+sudo tail -n 60 /root/deploy.log
+В конце лога должен быть блок ИТОГ: проверь, что в Не удалось указано (нет). Деплой перенаправляет вывод в /root/deploy.log, поэтому отсутствие текста в терминале не означает ошибку или успех. Сервер игры после деплоя не запускается автоматически; zomboid.service предназначен только для servertest.
 
-## Требования
-- Debian или Ubuntu с systemd, запуск от root
-- Не менее 8 ГБ ОЗУ (рекомендуется 16 ГБ и больше), ~10 ГБ свободного места для swap и ~15 ГБ под игру
-- Доступ в интернет (APT, SteamCMD, GitHub)
+2. Экспорт мира в бэкап:
+curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_deploy_script_DMT/refs/heads/main/pz_export.py -o /tmp/pz_export.py && sudo python3 /tmp/pz_export.py --name ivent
+3. Импорт / восстановление мира: сначала загрузить архив через WinSCP в /home/zomboid/import/ (там должен быть ровно один архив), затем:
+curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_deploy_script_DMT/refs/heads/main/pz_import.py -o /tmp/pz_import.py && sudo python3 /tmp/pz_import.py --name ivent
+Имя --name должно совпадать с именем мира внутри архива (ivent.ini, ivent.db, Multiplayer/ivent). Название архива может содержать дату, например ivent_2026-11-11_14-30-00.tar.gz.
 
-## Что делает скрипт
-- Обновляет систему, ставит зависимости (SteamCMD, Java-библиотеки, ufw, fail2ban)
-- Создаёт системного пользователя `zomboid` и дополнительных пользователей с sudo
-- Создаёт swap 8 ГБ, если его нет
-- Настраивает UFW (SSH и порты PZ: UDP 16261–16272) и Fail2ban
-- Скачивает сервер PZ (app 380870) через SteamCMD
-- Выставляет Java heap по объёму ОЗУ (16 ГБ → 10 ГБ, 32 ГБ → 20 ГБ)
-- Создаёт systemd-сервис `zomboid` (автозапуск включён, **сервер не запускается**)
-- Генерирует пароль админа PZ и сохраняет его в `/etc/zomboid/zomboid.env` (права 600)
+Если скрипты уже скачаны, запускай без curl: sudo bash deploy_zomboid.sh или sudo python3 pz_export.py --name ivent / sudo python3 pz_import.py --name ivent.
+Где что лежит
+/home/zomboid/
+├── pzserver/                   # Серверные файлы и start-server.sh
+├── Zomboid/
+│   ├── Server/                # ivent.ini, ivent_SandboxVars.lua и другие конфиги
+│   ├── db/                    # ivent.db (учётные записи / права)
+│   └── Saves/Multiplayer/     # ivent/ (мир, players.db и прочие файлы)
+├── import/                    # Один входящий архив; очищается после успешного импорта
+└── backup/                    # Архивы экспорта и бэкапы перед заменой; сохраняются
+В архиве сохраняется относительная структура Server/, db/, Saves/Multiplayer/. Для импорта все три части обязательны. Формат экспорта: .tar.gz; ZIP/TAR/RAR/7Z в импортёре предусмотрены при наличии внешних утилит для RAR/7Z.
+Что делают скрипты
+- Deploy: зависимости, пользователи zomboid, pidor1, pidor2, ACL, SteamCMD, сервер, UFW/Fail2ban, каталоги import и backup. Создаёт zomboid.service только для servertest; автоматически сервер не запускает. Лог: /root/deploy.log.
+- Export: находит данные по --name; если сервер запущен, спрашивает y/n на остановку; проверяет SQLite, создаёт и проверяет архив в /home/zomboid/backup/. Другие бэкапы не трогает. Временный .part удаляет. Сервер не перезапускает.
+- Import: ищет архив в import, распаковывает и проверяет состав; при необходимости спрашивает y/n на остановку сервера; сохраняет предыдущую версию в backup, удаляет старые файлы только выбранного мира, устанавливает новую версию, назначает права. При ошибке после начала замены пытается откатить изменения. После успеха очищает import/. Сервер не перезапускает.
+При отказе n операция отменяется. quit/systemd используется перед резервным SIGTERM; чужие миры останавливать нельзя.
+Проверки и управление
+# Деплой: результат и ошибки
+sudo tail -n 60 /root/deploy.log
 
-## Использование
-В поле post-deploy скрипта хостера:
+# Служба servertest (НЕ ivent)
+sudo systemctl status zomboid
+sudo systemctl start zomboid
+sudo systemctl stop zomboid
+sudo journalctl -u zomboid -n 80 --no-pager
 
-```bash
-#!/bin/bash
-curl -fsSL --retry 5 --retry-delay 5 https://raw.githubusercontent.com/Capt-Blackcat/pz_deploy_script_DMT/ХЕШ_КОММИТА/deploy_zomboid.sh -o /root/deploy_zomboid.sh \
-  && bash /root/deploy_zomboid.sh \
-  || echo "$(date) загрузчик: не удалось скачать или выполнить скрипт" >> /root/deploy.log
-```
+# Какие миры запущены
+ps -eo pid,args | grep '[z]ombie.network.GameServer'
 
-Или вручную: `bash deploy_zomboid.sh` от root. Своё значение пароля админа
-можно задать так: `PZ_ADMIN_PASSWORD=... bash deploy_zomboid.sh`.
+# Файлы конкретного мира
+sudo ls -lah /home/zomboid/Zomboid/Server/ivent* /home/zomboid/Zomboid/db/ivent.db
+sudo ls -lah /home/zomboid/Zomboid/Saves/Multiplayer/ivent/
 
-## После деплоя
-1. **Сразу смените пароли** созданных пользователей (`passwd ИМЯ`).
-2. Проверьте итог: `cat /root/deploy.log` (разделы «Выполнено / Пропущено / Не удалось»).
-3. Запуск: `systemctl start zomboid`
-4. Логи: `journalctl -u zomboid -f` (ждите строку `SERVER STARTED`)
-5. Вход админа: логин `admin`, пароль в `/etc/zomboid/zomboid.env`
+# Бэкапы и содержимое выбранного архива
+sudo ls -lh /home/zomboid/backup/
+sudo tar -tzf /home/zomboid/backup/ivent_YYYY-MM-DD_HH-MM-SS.tar.gz | head -40
+sudo gzip -t /home/zomboid/backup/ivent_YYYY-MM-DD_HH-MM-SS.tar.gz
 
-## Перенос бэкапа мира
-Остановите сервер (`systemctl stop zomboid`), затем замените в
-`/home/zomboid/Zomboid` содержимое `Server/servertest*` и
-`Saves/Multiplayer/servertest` данными из бэкапа и выдайте права:
-`chown -R zomboid:zomboid /home/zomboid/Zomboid`.
-
-## Пути
-| Что | Где |
-|---|---|
-| Лог деплоя | `/root/deploy.log` |
-| Сервер | `/home/zomboid/pzserver` |
-| Данные, мир, конфиги | `/home/zomboid/Zomboid` |
-| Unit-файл | `/etc/systemd/system/zomboid.service` |
-| Пароль админа PZ | `/etc/zomboid/zomboid.env` |
-| Оригинал JVM-настроек | `/home/zomboid/pzserver/ProjectZomboid64.json.before-heap` |
-
-## Повторный запуск
-Скрипт идемпотентен: существующие пользователи, swap, SteamCMD и пароль админа
-не перезаписываются. Повторный запуск обновит файлы игры через `validate`
-и заново применит настройки heap.
+# Права и наличие архиватора для RAR/7Z
+getfacl /home/zomboid/import /home/zomboid/backup
+command -v 7z || command -v unrar
+Важно: остановка сервера в импорте/экспорте требует sudo; после выполнения запуск вручную. systemctl start zomboid запускает только servertest, не ivent. После первого деплоя смени временные пароли операторов: sudo passwd pidor1 и sudo passwd pidor2. Не запускай импорт при наличии других нужных файлов в import/: после успешного импорта каталог очищается целиком.
