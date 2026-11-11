@@ -3,9 +3,11 @@
 Быстрый запуск через GitHub
 Команды предполагают, что все три файла загружены в корень ветки main репозитория `Capt-Blackcat/pz_deploy_script_DMT`.
 
-# 1. Деплой VPS (однократно, сразу после получения первичного SSH-доступа, ЛИБО перед деплоем в поле `Post-install скрипт`):
+# 1. Деплой VPS в поле `Post-install скрипт` при заказе:
 ```
-curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_deploy_script_DMT/refs/heads/main/deploy_zomboid.sh -o /tmp/deploy_zomboid.sh && sudo bash /tmp/deploy_zomboid.sh
+#!/bin/sh
+apt-get update && apt-get install -y curl
+curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_deploy_script_DMT/refs/heads/main/deploy_zomboid.sh -o /tmp/deploy_zomboid.sh && bash /tmp/deploy_zomboid.sh
 ```
 ## Сразу после завершения деплоя обязательно проверь результат отдельной командой:
 ```
