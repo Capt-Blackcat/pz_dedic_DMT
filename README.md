@@ -15,20 +15,28 @@ sudo tail -n 60 /root/deploy.log
 ```
 В конце лога должен быть блок ИТОГ: проверь, что в Не удалось указано (нет). Деплой перенаправляет вывод в /root/deploy.log, поэтому отсутствие текста в терминале не означает ошибку или успех. Сервер игры после деплоя не запускается автоматически; zomboid.service предназначен только для servertest.
 
-# 2. Экспорт мира в бэкап:
-```
-curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_deploy_script_DMT/refs/heads/main/pz_export.py -o /tmp/pz_export.py && sudo python3 /tmp/pz_export.py --name ivent
-```
-
-# 3. Импорт / восстановление мира: сначала загрузить архив через WinSCP в /home/zomboid/import/ (там должен быть ровно один архив), затем:
+# 2. Импорт / восстановление мира: сначала загрузить архив через WinSCP в /home/zomboid/import/ (там должен быть ровно один архив), затем:
 ```
 curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_deploy_script_DMT/refs/heads/main/pz_import.py -o /tmp/pz_import.py && sudo python3 /tmp/pz_import.py --name ivent
 ```
 Имя --name должно совпадать с именем мира внутри архива (ivent.ini, ivent.db, Multiplayer/ivent). Название архива может содержать дату, например `ivent_2026-11-11_14-30-00.tar.gz`.
 
-Если скрипты уже скачаны, запускай без curl: 
+# 3. Экспорт мира в бэкап:
 ```
-sudo bash deploy_zomboid.sh или sudo python3 pz_export.py --name ivent / sudo python3 pz_import.py --name ivent
+curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_deploy_script_DMT/refs/heads/main/pz_export.py -o /tmp/pz_export.py && sudo python3 /tmp/pz_export.py --name ivent
+```
+
+Запуск с консолью:
+```
+sudo su - zomboid -c './pzserver/start-server.sh -servername ivent'
+```
+Запуск в фоне:
+```
+sudo -u zomboid screen -dmS ivent bash -c 'cd /home/zomboid/pzserver && ./start-server.sh -servername ivent'
+```
+Подключение к консоли:
+```
+sudo -u zomboid screen -r ivent
 ```
 
 ## Где что лежит
