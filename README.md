@@ -15,7 +15,8 @@ sudo tail -n 60 /root/deploy.log
 ```
 В конце лога должен быть блок ИТОГ: проверь, что в Не удалось указано (нет). Деплой перенаправляет вывод в /root/deploy.log, поэтому отсутствие текста в терминале не означает ошибку или успех. Сервер игры после деплоя не запускается автоматически; zomboid.service предназначен только для servertest.
 
-# 2. Импорт / восстановление мира: сначала загрузить архив через WinSCP в /home/zomboid/import/ (там должен быть ровно один архив), затем:
+# 2. Импорт / восстановление мира:
+Cначала загрузить архив через WinSCP в /home/zomboid/import/ (там должен быть ровно один архив), затем:
 ```
 curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_deploy_script_DMT/refs/heads/main/pz_import.py -o /tmp/pz_import.py && sudo python3 /tmp/pz_import.py --name ivent
 ```
