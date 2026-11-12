@@ -267,13 +267,18 @@ run 'Создание каталогов импорта и бэкапов' \
     install -d -o zomboid -g zomboid -m 750 \
     /home/zomboid/import /home/zomboid/backup || exit 1
 
-# Доступ операторов: просмотр домашнего каталога, запись в рабочие папки.
+# Операторы могут просматривать файлы установки и Workshop (включая новые загрузки).
+# Права записи выдаём только для данных, импорта и бэкапов, не для бинарников игры.
+READ_DIRS=(/home/zomboid/pzserver /home/zomboid/steamcmd)
+WRITE_DIRS=(/home/zomboid/Zomboid /home/zomboid/import /home/zomboid/backup)
 if setfacl -m u:pidor1:r-x,u:pidor2:r-x /home/zomboid \
-   && setfacl -R -m u:pidor1:rwX,u:pidor2:rwX \
-       /home/zomboid/Zomboid /home/zomboid/import /home/zomboid/backup \
-   && find /home/zomboid/Zomboid /home/zomboid/import /home/zomboid/backup -type d \
+   && setfacl -R -m u:pidor1:r-X,u:pidor2:r-X "${READ_DIRS[@]}" \
+   && find "${READ_DIRS[@]}" -type d \
+      -exec setfacl -m d:u:pidor1:r-x,d:u:pidor2:r-x {} + \
+   && setfacl -R -m u:pidor1:rwX,u:pidor2:rwX "${WRITE_DIRS[@]}" \
+   && find "${WRITE_DIRS[@]}" -type d \
       -exec setfacl -m d:u:pidor1:rwx,d:u:pidor2:rwx {} +; then
-    ok 'Доступ pidor1 и pidor2 к данным Zomboid, import, backup настроен'
+    ok 'ACL операторов: чтение pzserver/Workshop и steamcmd, запись в Zomboid/import/backup'
 else
     fail 'Настройка ACL для операторов Zomboid'
 fi
