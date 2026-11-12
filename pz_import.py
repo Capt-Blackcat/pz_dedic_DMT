@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Import one Project Zomboid server from /home/zomboid/import with backup and rollback.
+"""Import full or partial Project Zomboid data with backup and rollback.
 
 Usage: sudo python3 pz_import.py --name ivent
 For running servers, supports a GNU screen session owning the target process,
@@ -94,19 +94,19 @@ def current_paths(name: str) -> list[Path]:
     dbdir = DATA / 'db'
     if dbdir.is_dir():
         found.extend(sorted(p for p in dbdir.iterdir() if p.is_file() and not p.is_symlink() and (p.name == name + '.db' or p.name.startswith(name + '.db-'))))
-    savedir = DATA / 'Saves' / 'Multiplayer' / name
-    if savedir.is_dir() and not savedir.is_symlink():
-        found.append(savedir)
+    for dirname in (name, name + '_player'):
+        savedir = DATA / 'Saves' / 'Multiplayer' / dirname
+        if savedir.is_dir() and not savedir.is_symlink():
+            found.append(savedir)
     return found
 
 
 def find_archive(name: str) -> Path:
     require(INBOX.is_dir(), f'Папка не существует: {INBOX}')
     archives = [p for p in INBOX.iterdir() if p.is_file() and not p.is_symlink() and p.name.lower().endswith(SUFFIXES)]
-    matches = [p for p in archives if name.casefold() in p.name.casefold()]
-    require(len(archives) == 1, f'В import должно находиться ровно 1 архив, найдено {len(archives)}: {[p.name for p in archives]}')
-    require(len(matches) == 1, f'Архив не соответствует --name {name}: {archives[0].name}')
-    return matches[0]
+    require(len(archives) == 1, f'В import должен быть ровно 1 архив, найдено {len(archives)}: {[p.name for p in archives]}')
+    # The filename may be anything: archive contents are checked against --name.
+    return archives[0]
 
 
 def check_member(name: str) -> Path:
@@ -209,37 +209,81 @@ def unpack(archive: Path, stage: Path) -> None:
 
 
 def discover(stage: Path, name: str) -> list[tuple[Path, Path]]:
+    """Find named files in full or partial archives, including *_player saves."""
     base = stage
     for _ in range(5):
-        if (base / 'Server').is_dir() or (base / 'Multiplayer').is_dir() or (base / 'Saves').is_dir():
+        if any((base / part).is_dir() for part in ('Server', 'db', 'Saves', 'Multiplayer')):
             break
         children = list(base.iterdir())
         if len(children) == 1 and children[0].is_dir() and not children[0].is_symlink():
             base = children[0]
         else:
             break
-    configs = base / 'Server'
-    require(configs.is_dir(), 'В архиве нет папки Server')
-    config_files = sorted(p for p in configs.iterdir() if is_named_config(p, name))
-    require(any(p.name == name + '.ini' for p in config_files), f'Не найден Server/{name}.ini')
-    db = base / 'db' / (name + '.db')
-    if not db.is_file():
-        db = base / (name + '.db')
-    require(db.is_file() and not db.is_symlink(), f'В архиве нет {name}.db')
-    save = base / 'Saves' / 'Multiplayer' / name
-    if not save.is_dir():
-        save = base / 'Multiplayer' / name
-    require(save.is_dir() and not save.is_symlink(), f'В архиве нет Multiplayer/{name}/')
-    require(any(save.iterdir()), f'Папка Multiplayer/{name}/ пуста')
-    mapping = [(p, DATA / 'Server' / p.name) for p in config_files]
-    # SQLite sidecars, if provided, must be imported along with the database.
-    mapping.append((db, DATA / 'db' / db.name))
-    for suffix in ('-wal', '-shm', '-journal'):
-        sidecar = db.with_name(db.name + suffix)
-        if sidecar.is_file():
-            mapping.append((sidecar, DATA / 'db' / sidecar.name))
-    mapping.append((save, DATA / 'Saves' / 'Multiplayer' / name))
+
+    mapping: list[tuple[Path, Path]] = []
+    configs = base / 'Server' if (base / 'Server').is_dir() else base if (base.name == 'Server' or any(is_named_config(p, name) for p in base.iterdir())) else None
+    if configs is not None:
+        for path in sorted(configs.iterdir()):
+            if is_named_config(path, name):
+                mapping.append((path, DATA / 'Server' / path.name))
+
+    dbdir = base / 'db' if (base / 'db').is_dir() else base if (base.name == 'db' or (base / (name + '.db')).is_file()) else None
+    if dbdir is not None:
+        db = dbdir / (name + '.db')
+        sidecars = [dbdir / (name + '.db' + suffix) for suffix in ('-wal', '-shm', '-journal')]
+        present_sidecars = [p for p in sidecars if p.exists()]
+        require(not present_sidecars or db.is_file(), 'SQLite sidecars без основного .db не поддерживаются')
+        if db.is_file():
+            require(not db.is_symlink(), f'Ссылка вместо базы: {db}')
+            mapping.append((db, DATA / 'db' / db.name))
+            for path in present_sidecars:
+                require(path.is_file() and not path.is_symlink(), f'Недопустимый SQLite sidecar: {path}')
+                mapping.append((path, DATA / 'db' / path.name))
+
+    multiplayer = base / 'Saves' / 'Multiplayer'
+    if not multiplayer.is_dir():
+        multiplayer = base / 'Multiplayer'
+    if not multiplayer.is_dir():
+        multiplayer = base
+    for dirname in (name, name + '_player'):
+        save = multiplayer / dirname
+        if base.name == dirname:
+            save = base
+        if save.is_dir():
+            require(not save.is_symlink(), f'Ссылка вместо сохранения: {save}')
+            require(any(save.iterdir()), f'Пустая папка сохранения: {save}')
+            mapping.append((save, DATA / 'Saves' / 'Multiplayer' / dirname))
+
+    require(bool(mapping), f'Нет данных для {name}: ожидаются Server/, db/, Saves/Multiplayer/{name}/ или {name}_player/')
     return mapping
+
+
+def affected_paths(mapping: list[tuple[Path, Path]], name: str) -> list[Path]:
+    """Only paths touched by this import. Existing SQLite sidecars are also affected."""
+    paths = {dst for _, dst in mapping}
+    if DATA / 'db' / (name + '.db') in paths:
+        paths.update(DATA / 'db' / (name + '.db' + suffix) for suffix in ('-wal', '-shm', '-journal'))
+    return sorted(paths, key=str)
+
+
+def validate_targets(mapping: list[tuple[Path, Path]], paths: list[Path]) -> None:
+    """Refuse symlinks in target paths, parents, and existing save trees."""
+    for path in paths:
+        require(path.is_relative_to(DATA), f'Путь за пределами данных: {path}')
+        current = path
+        while current != HOME.parent:
+            require(not current.is_symlink(), f'Символическая ссылка в назначении: {current}')
+            if current != path and current.exists():
+                require(current.is_dir(), f'Родительский путь не каталог: {current}')
+            current = current.parent
+        if path.is_dir():
+            for child in path.rglob('*'):
+                require(not child.is_symlink() and (child.is_file() or child.is_dir()),
+                        f'Недопустимый объект в целевом сохранении: {child}')
+    for source, target in mapping:
+        if target.exists():
+            require(target.is_dir() if source.is_dir() else target.is_file(),
+                    f'Тип существующего объекта не совпадает: {target}')
 
 
 def backup(name: str, paths: list[Path]) -> Path:
@@ -267,25 +311,29 @@ def backup(name: str, paths: list[Path]) -> Path:
     return out
 
 
-def remove_targets(name: str) -> None:
-    for p in current_paths(name):
-        if p.is_dir():
-            shutil.rmtree(p)
-        else:
-            p.unlink()
+def remove_targets(paths: list[Path]) -> None:
+    for path in sorted(paths, key=lambda p: len(p.parts), reverse=True):
+        if path.is_dir():
+            shutil.rmtree(path)
+        elif path.exists():
+            path.unlink()
 
 
-def install(mapping: list[tuple[Path, Path]]) -> None:
+def install(mapping: list[tuple[Path, Path]], *, replace_saves: bool = False) -> None:
+    # Merge by default; explicit --replace-saves replaces only supplied save folders.
     for src, dst in mapping:
         dst.parent.mkdir(parents=True, exist_ok=True)
         if src.is_dir():
-            shutil.copytree(src, dst)
+            if replace_saves and dst.is_dir():
+                shutil.rmtree(dst)
+            shutil.copytree(src, dst, dirs_exist_ok=True)
         else:
             shutil.copy2(src, dst)
 
 
-def permissions(name: str) -> None:
-    paths = current_paths(name)
+def permissions(name: str, paths: list[Path] | None = None) -> None:
+    if paths is None:
+        paths = current_paths(name)
     require(bool(paths), 'Нет установленных файлов для назначения прав')
     for p in paths:
         run(['chown', '-R', 'zomboid:zomboid', str(p)])
@@ -406,8 +454,9 @@ def stop_server(name: str) -> None:
     done('Сервер остановлен')
 
 
-def restore(name: str, archive: Path | None) -> None:
-    remove_targets(name)
+def restore(name: str, archive: Path | None, affected: list[Path]) -> None:
+    # Roll back ONLY touched components, leaving other worlds/configs untouched.
+    remove_targets(affected)
     if archive is not None:
         with tarfile.open(archive, 'r:gz') as tar:
             for member in tar.getmembers():
@@ -420,22 +469,20 @@ def restore(name: str, archive: Path | None) -> None:
                     with tar.extractfile(member) as src, dest.open('wb') as out:
                         require(src is not None, 'Ошибка чтения резервной копии')
                         shutil.copyfileobj(src, out)
-        permissions(name)
-        done('Откат: предыдущая версия восстановлена')
+        restored = [path for path in affected if path.exists()]
+        if restored:
+            permissions(name, restored)
+        done('Откат: затронутые данные восстановлены')
     else:
-        done('Откат: частично импортированные файлы удалены (старой версии не было)')
+        done('Откат: новые данные удалены (прежних версий не было)')
 
 
-def cleanup_inbox() -> None:
-    for p in INBOX.iterdir():
-        if p.is_dir() and not p.is_symlink():
-            shutil.rmtree(p)
-        else:
-            p.unlink()
-    done('Каталог import очищен')
+def cleanup_inbox(archive: Path) -> None:
+    archive.unlink()
+    done('Импортированный архив удалён из import; остальные файлы сохранены')
 
 
-def main(name: str) -> None:
+def main(name: str, *, replace_saves: bool = False) -> None:
     require(os.geteuid() == 0, 'Запускать от root (sudo)')
     validate_name(name)
     require(shutil.which('setfacl') is not None, 'Нужен пакет acl')
@@ -447,40 +494,41 @@ def main(name: str) -> None:
     extracted.mkdir(mode=0o700)
     changed = False
     old_backup: Path | None = None
+    affected: list[Path] = []
     try:
         unpack(archive, extracted)
         mapping = discover(extracted, name)
-        done('Архив распакован, нужные файлы найдены')
+        affected = affected_paths(mapping, name)
+        validate_targets(mapping, affected)
+        done('Распакованы компоненты: ' + ', '.join(str(dst.relative_to(DATA)) for _, dst in mapping))
         stop_server(name)
-        old = current_paths(name)
+        old = [path for path in affected if path.exists()]
         if old:
             old_backup = backup(name, old)
-            done('Резервная копия: ' + str(old_backup))
+            done('Резервная копия затронутых данных: ' + str(old_backup))
         else:
-            skipped('Предыдущих файлов сервера нет')
+            skipped('Заменяемых файлов нет; создаются новые')
         changed = True
-        remove_targets(name)
-        done('Прежние файлы выбранного сервера удалены')
-        install(mapping)
-        done('Новые файлы размещены')
-        permissions(name)
+        # Old WAL/SHM/journal must not survive replacement of the main SQLite DB.
+        supplied = {dst for _, dst in mapping}
+        for path in affected:
+            if path not in supplied and path.exists():
+                path.unlink()
+        install(mapping, replace_saves=replace_saves)
+        done('Импортированные файлы добавлены/заменены; остальные сохранены')
+        permissions(name, [dst for _, dst in mapping])
         done('Владелец и ACL настроены')
-        require((DATA / 'db' / (name + '.db')).is_file(), 'Не найдена база после импорта')
-        require((DATA / 'Server' / (name + '.ini')).is_file(), 'Не найден конфиг после импорта')
-        require((DATA / 'Saves' / 'Multiplayer' / name).is_dir(), 'Не найден мир после импорта')
-        done('Структура проверена')
-        note('\nУстановленные файлы:')
-        for p in current_paths(name):
-            size = p.stat().st_size if p.is_file() else sum(f.stat().st_size for f in p.rglob('*') if f.is_file())
-            note(f'  {p.relative_to(DATA)}  ({size} байт)')
-        note(f'Бэкап: {old_backup if old_backup else "не требовался"}')
+        for src, dst in mapping:
+            require(dst.is_dir() if src.is_dir() else dst.is_file(), f'Не установлен компонент: {dst}')
+        done('Импортированные компоненты проверены')
+        note('Бэкап: ' + (str(old_backup) if old_backup else 'не требовался'))
         note('Сервер оставлен остановленным; запуск вручную.')
     except BaseException as error:
         if changed:
             failure('Импорт прерван: ' + str(error))
             note('Запускается откат...')
             try:
-                restore(name, old_backup)
+                restore(name, old_backup, affected)
             except BaseException as rollback_error:
                 failure('ОТКАТ НЕ УДАЛСЯ: ' + str(rollback_error))
                 note('Резервная копия: ' + str(old_backup))
@@ -488,18 +536,17 @@ def main(name: str) -> None:
     finally:
         if stage.exists():
             shutil.rmtree(stage, ignore_errors=True)
-    # Cleanup is deliberately outside the rollback block. A cleanup error does
-    # not invalidate successfully installed data and must not revert it.
-    cleanup_inbox()
+    cleanup_inbox(archive)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--name', required=True, help='Имя сервера, например ivent')
+    parser.add_argument('--replace-saves', action='store_true', help='Полностью заменить только папки мира/игроков из архива')
     args = parser.parse_args()
     rc = 0
     try:
-        main(args.name)
+        main(args.name, replace_saves=args.replace_saves)
     except (Exception, KeyboardInterrupt) as error:
         if not FAILED:
             failure(str(error) or type(error).__name__)

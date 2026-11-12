@@ -267,15 +267,13 @@ run 'Создание каталогов импорта и бэкапов' \
     install -d -o zomboid -g zomboid -m 750 \
     /home/zomboid/import /home/zomboid/backup || exit 1
 
-# Доступ операторов: просмотр домашнего каталога, запись в рабочие папки.
-if setfacl -m u:pidor1:r-x,u:pidor2:r-x /home/zomboid \
-   && setfacl -R -m u:pidor1:rwX,u:pidor2:rwX \
-       /home/zomboid/Zomboid /home/zomboid/import /home/zomboid/backup \
-   && find /home/zomboid/Zomboid /home/zomboid/import /home/zomboid/backup -type d \
-      -exec setfacl -m d:u:pidor1:rwx,d:u:pidor2:rwx {} +; then
-    ok 'Доступ pidor1 и pidor2 к данным Zomboid, import, backup настроен'
+# Full operator permissions across the Zomboid home tree, including Workshop and saves.
+# Existing files: read/write; directories: read/write/traverse; future children: inherit ACL.
+if setfacl -R -m u:pidor1:rwX,u:pidor2:rwX /home/zomboid \
+   && find /home/zomboid -type d -exec setfacl -m d:u:pidor1:rwx,d:u:pidor2:rwx {} +; then
+    ok 'Full recursive operator ACL for /home/zomboid'
 else
-    fail 'Настройка ACL для операторов Zomboid'
+    fail 'Operator ACL for /home/zomboid'
 fi
 
 # Пароль админа: из окружения PZ_ADMIN_PASSWORD или случайный; хранится только у root
