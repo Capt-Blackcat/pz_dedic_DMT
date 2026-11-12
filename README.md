@@ -10,7 +10,7 @@ apt-get update && apt-get install -y curl
 curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_deploy_script_DMT/refs/heads/main/deploy_zomboid.sh -o /tmp/deploy_zomboid.sh && bash /tmp/deploy_zomboid.sh
 ```
 ---
-## 1. Сразу после завершения деплоя обязательно проверь результат отдельной командой:
+# 1. Сразу после завершения деплоя обязательно проверь результат отдельной командой:
 ```
 sudo tail -n 60 /root/deploy.log
 ```
@@ -25,7 +25,7 @@ curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_deploy_script_DMT/
 Имя --name должно совпадать с именем мира внутри архива (ivent.ini, ivent.db, Multiplayer/ivent). Название архива может содержать дату, например `ivent_2026-11-11_14-30-00.tar.gz`.
 
 ---
-## 3. Экспорт мира в бэкап:
+# 3. Экспорт мира в бэкап:
 ```
 curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_deploy_script_DMT/refs/heads/main/pz_export.py -o /tmp/pz_export.py && sudo python3 /tmp/pz_export.py --name ivent
 ```
