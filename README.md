@@ -1,4 +1,7 @@
-# Project Zomboid Dedicated: deploy / import / export / start
+# Warning: 100% human-debugged AI slop. Tested on real servers.
+---
+
+# Project Zomboid Dedicated: deploy / import / export
 Четыре скрипта: `deploy_zomboid.sh` (установка VPS), `pz_import.py` (полный/частичный импорт), `pz_export.py` (бэкап мира и игроков), `pz_start.py` (запуск мира). Примеры ниже для сервера ivent: замени имя на своё. Все команды запускаются через sudo.
 ## Быстрый запуск через GitHub
 Команды предполагают, что все четыре файла загружены в корень ветки main репозитория `Capt-Blackcat/pz_dedic_DMT`.
