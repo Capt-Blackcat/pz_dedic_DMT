@@ -267,20 +267,13 @@ run 'Создание каталогов импорта и бэкапов' \
     install -d -o zomboid -g zomboid -m 750 \
     /home/zomboid/import /home/zomboid/backup || exit 1
 
-# Операторы могут просматривать файлы установки и Workshop (включая новые загрузки).
-# Права записи выдаём только для данных, импорта и бэкапов, не для бинарников игры.
-READ_DIRS=(/home/zomboid/pzserver /home/zomboid/steamcmd)
-WRITE_DIRS=(/home/zomboid/Zomboid /home/zomboid/import /home/zomboid/backup)
-if setfacl -m u:pidor1:r-x,u:pidor2:r-x /home/zomboid \
-   && setfacl -R -m u:pidor1:r-X,u:pidor2:r-X "${READ_DIRS[@]}" \
-   && find "${READ_DIRS[@]}" -type d \
-      -exec setfacl -m d:u:pidor1:r-x,d:u:pidor2:r-x {} + \
-   && setfacl -R -m u:pidor1:rwX,u:pidor2:rwX "${WRITE_DIRS[@]}" \
-   && find "${WRITE_DIRS[@]}" -type d \
-      -exec setfacl -m d:u:pidor1:rwx,d:u:pidor2:rwx {} +; then
-    ok 'ACL операторов: чтение pzserver/Workshop и steamcmd, запись в Zomboid/import/backup'
+# Full operator permissions across the Zomboid home tree, including Workshop and saves.
+# Existing files: read/write; directories: read/write/traverse; future children: inherit ACL.
+if setfacl -R -m u:pidor1:rwX,u:pidor2:rwX /home/zomboid \
+   && find /home/zomboid -type d -exec setfacl -m d:u:pidor1:rwx,d:u:pidor2:rwx {} +; then
+    ok 'Full recursive operator ACL for /home/zomboid'
 else
-    fail 'Настройка ACL для операторов Zomboid'
+    fail 'Operator ACL for /home/zomboid'
 fi
 
 # Пароль админа: из окружения PZ_ADMIN_PASSWORD или случайный; хранится только у root
