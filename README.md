@@ -1,3 +1,6 @@
+# Warning: 100% human-debugged AI slop. Tested on real servers.
+---
+
 # Project Zomboid Dedicated: deploy / import / export
 Три скрипта: `deploy_zomboid.sh` (установка VPS), `pz_import.py` (восстановление/перенос мира), `pz_export.py` (бэкап мира). Примеры ниже для сервера ivent: замени имя на своё. Все команды запускаются через sudo.
 Быстрый запуск через GitHub
