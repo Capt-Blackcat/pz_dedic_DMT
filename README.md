@@ -32,9 +32,14 @@ curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_deploy_script_DMT/
 ---
 
 # Запуск
-### Запуск с живой консолью:
+### Первичный запуск сервера PZ (деплой или свежий импорт):
 ```
-sudo -u zomboid screen -S ivent bash -c 'cd /home/zomboid/pzserver && ./start-server.sh -servername ivent'
+curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_deploy_script_DMT/refs/heads/beta.1/pz_start.py -o /tmp/pz_start.py && sudo python3 /tmp/pz_start.py --name ivent
+```
+
+### Последующие запуски:
+```
+sudo python3 /tmp/pz_start.py --name ivent
 ```
 ### Перевод в фон:
 ```
