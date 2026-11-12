@@ -2,7 +2,7 @@
 """Export one Project Zomboid server to /home/zomboid/backup as .tar.gz.
 
 Usage: sudo python3 pz_export.py --name ivent
-The archive is compatible with pz_import.py (Server/, db/, Saves/Multiplayer/).
+The archive includes Server/, db/, Saves/Multiplayer/NAME and optional NAME_player.
 """
 from __future__ import annotations
 
@@ -184,18 +184,24 @@ def collect(name: str) -> list[tuple[Path, str]]:
             safe_file(sidecar)
             members.append((sidecar, f'db/{sidecar.name}'))
 
-    members.append((world, world.relative_to(DATA).as_posix()))
-    for current, dirs, files in os.walk(world, followlinks=False):
-        for item in dirs + files:
-            candidate = Path(current) / item
-            require(not candidate.is_symlink(), f'Символьная ссылка в мире: {candidate}')
-            require(candidate.is_dir() or candidate.is_file(), f'Необычный объект в мире: {candidate}')
-        for dirname in dirs:
-            folder = Path(current) / dirname
-            members.append((folder, folder.relative_to(DATA).as_posix()))
-        for filename in files:
-            source = Path(current) / filename
-            members.append((source, source.relative_to(DATA).as_posix()))
+    player = world.with_name(name + '_player')
+    save_folders = [world]
+    if player.exists() or player.is_symlink():
+        require(player.is_dir() and not player.is_symlink(), f'Недопустимая папка игроков: {player}')
+        save_folders.append(player)
+    for folder in save_folders:
+        members.append((folder, folder.relative_to(DATA).as_posix()))
+        for current, dirs, files in os.walk(folder, followlinks=False):
+            for item in dirs + files:
+                candidate = Path(current) / item
+                require(not candidate.is_symlink(), f'Символьная ссылка в мире: {candidate}')
+                require(candidate.is_dir() or candidate.is_file(), f'Необычный объект в мире: {candidate}')
+            for dirname in dirs:
+                folder = Path(current) / dirname
+                members.append((folder, folder.relative_to(DATA).as_posix()))
+            for filename in files:
+                source = Path(current) / filename
+                members.append((source, source.relative_to(DATA).as_posix()))
     require(any(source.is_file() and arc.startswith(f'Saves/Multiplayer/{name}/')
                 for source, arc in members), 'Папка мира не содержит файлов')
     return members
