@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One-time Project Zomboid dedicated-server deployment.
 # Run as root on Ubuntu/Debian with systemd.
-set -uo pipefail
+set -Euo pipefail
 umask 027
 
 LOG=/root/deploy.log
@@ -33,6 +33,13 @@ report() {
     if ((rc != 0 || ${#FAILED[@]} > 0)); then exit 1; else exit 0; fi
 }
 trap report EXIT
+# Report unexpected failures, but DO NOT terminate deployment on them.
+# Expected failures in if/&&/|| branches are reported explicitly by run()/fail().
+unexpected_error() {
+    local status=$1 line=$2 command=$3
+    fail "Строка ${line}: ${command} (код ${status})"
+}
+trap 'unexpected_error "$?" "$LINENO" "$BASH_COMMAND"' ERR
 
 export DEBIAN_FRONTEND=noninteractive
 if (( EUID != 0 )); then fail 'Требуются права root'; exit 1; fi
@@ -87,8 +94,11 @@ if swapon --noheadings --show=NAME | grep -Fxq /swapfile; then
 elif [[ -e /swapfile ]]; then
     if run 'Активация существующего swap' swapon /swapfile; then
         if ! grep -Eq '^[[:space:]]*/swapfile[[:space:]]' /etc/fstab; then
-            printf '/swapfile none swap sw 0 0\n' >> /etc/fstab
-            ok 'Запись swap в fstab'
+            if printf '/swapfile none swap sw 0 0\n' >> /etc/fstab; then
+                ok 'Запись swap в fstab'
+            else
+                fail 'Запись swap в fstab'
+            fi
         fi
     fi
 else
@@ -97,8 +107,11 @@ else
         if fallocate -l 8G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile; then
             ok 'Swap 8 ГБ создан и активирован'
             if ! grep -Eq '^[[:space:]]*/swapfile[[:space:]]' /etc/fstab; then
-                printf '/swapfile none swap sw 0 0\n' >> /etc/fstab
-                ok 'Swap добавлен в fstab'
+                if printf '/swapfile none swap sw 0 0\n' >> /etc/fstab; then
+                    ok 'Swap добавлен в fstab'
+                else
+                    fail 'Swap добавлен в fstab'
+                fi
             fi
         else
             fail 'Создание swap'
@@ -129,7 +142,7 @@ else
     skip 'Включение UFW: имеются ошибки предварительной настройки'
 fi
 
-cat > /etc/fail2ban/jail.d/90-zomboid-deploy.local <<'EOF'
+if cat > /etc/fail2ban/jail.d/90-zomboid-deploy.local <<'EOF'
 [DEFAULT]
 banaction = ufw
 bantime = 1h
@@ -139,13 +152,17 @@ maxretry = 5
 [sshd]
 enabled = true
 EOF
-ok 'Конфигурация Fail2ban записана'
+then
+    ok 'Конфигурация Fail2ban записана'
+else
+    fail 'Конфигурация Fail2ban не записана'
+fi
 run 'Автозапуск Fail2ban' systemctl enable fail2ban || true
 run 'Перезапуск Fail2ban' systemctl restart fail2ban || true
 if systemctl is-active --quiet fail2ban; then ok 'Fail2ban активен'; else fail 'Fail2ban не активен'; fi
 
-install -d -o zomboid -g zomboid -m 0750 /home/zomboid/steamcmd /home/zomboid/pzserver
-ok 'Каталоги SteamCMD и сервера подготовлены'
+run 'Каталоги SteamCMD и сервера подготовлены' \
+    install -d -o zomboid -g zomboid -m 0750 /home/zomboid/steamcmd /home/zomboid/pzserver || true
 
 if [[ -f /home/zomboid/steamcmd/steamcmd.sh ]]; then
     skip 'SteamCMD уже распакован'
@@ -178,7 +195,7 @@ if [[ ! -f "$STEAMCMD" ]]; then
     fail 'SteamCMD отсутствует; установка игры пропущена'
     exit 1
 fi
-chmod +x "$STEAMCMD"
+run 'Права запуска SteamCMD' chmod +x "$STEAMCMD" || true
 
 STEAM_OK=0
 for attempt in 1 2 3 4 5; do
@@ -197,7 +214,7 @@ if (( ! STEAM_OK )); then
     fail 'Загрузка Project Zomboid (5 попыток)'; exit 1
 fi
 ok 'Файлы Project Zomboid загружены через публичную ветку Steam'
-chmod +x "$SERVER_DIR/start-server.sh"
+run 'Права запуска start-server.sh' chmod +x "$SERVER_DIR/start-server.sh" || true
 
 # Heap по реальному объёму RAM: 16 GB -> 10 GB, 32 GB -> 20 GB.
 RAM_MB=$(awk '/^MemTotal:/ {print int($2/1024)}' /proc/meminfo)
@@ -213,7 +230,9 @@ fi
 export HEAP_GB
 
 JSON_FILE="$SERVER_DIR/ProjectZomboid64.json"
-[[ -f "$JSON_FILE.before-heap" ]] || cp -p "$JSON_FILE" "$JSON_FILE.before-heap"
+if [[ ! -f "$JSON_FILE.before-heap" ]]; then
+    run 'Копия JSON до настройки памяти' cp -p "$JSON_FILE" "$JSON_FILE.before-heap" || true
+fi
 if python3 - "$JSON_FILE" <<'PY'
 import json, os, pathlib, re, sys
 p = pathlib.Path(sys.argv[1])
@@ -230,29 +249,31 @@ json.loads(tmp.read_text())      # проверка до подмены ориг
 os.replace(tmp, p)
 PY
 then
-    chown zomboid:zomboid "$JSON_FILE" "$JSON_FILE.before-heap"
-    ok "Java heap: Xms=2G, Xmx=${HEAP_GB}G"
+    if chown zomboid:zomboid "$JSON_FILE" "$JSON_FILE.before-heap"; then
+        ok "Java heap: Xms=2G, Xmx=${HEAP_GB}G"
+    else
+        fail "Владелец JSON: не удалось назначить zomboid"
+    fi
 else
     fail 'Настройка Java heap / проверка JSON'
 fi
 
 # Каталог данных (мир, конфиги, логи)
-install -d -o zomboid -g zomboid -m 755 /home/zomboid/Zomboid
-ok 'Каталог данных /home/zomboid/Zomboid готов'
+run 'Каталог данных /home/zomboid/Zomboid готов' \
+    install -d -o zomboid -g zomboid -m 755 /home/zomboid/Zomboid || true
 
 # Каталоги для импорта и бэкапов
 run 'Создание каталогов импорта и бэкапов' \
     install -d -o zomboid -g zomboid -m 750 \
     /home/zomboid/import /home/zomboid/backup || exit 1
 
-# Доступ операторов к данным Project Zomboid
+# Доступ операторов: просмотр домашнего каталога, запись в рабочие папки.
 if setfacl -m u:pidor1:r-x,u:pidor2:r-x /home/zomboid \
-   && setfacl -R -m u:pidor1:rwX,u:pidor2:rwX /home/zomboid/Zomboid \
-   && setfacl -m u:pidor1:rwx,u:pidor2:rwx,d:u:pidor1:rwx,d:u:pidor2:rwx /home/zomboid/import \
-   && setfacl -m u:pidor1:rwx,u:pidor2:rwx,d:u:pidor1:rwx,d:u:pidor2:rwx /home/zomboid/backup \
-   && find /home/zomboid/Zomboid -type d \
+   && setfacl -R -m u:pidor1:rwX,u:pidor2:rwX \
+       /home/zomboid/Zomboid /home/zomboid/import /home/zomboid/backup \
+   && find /home/zomboid/Zomboid /home/zomboid/import /home/zomboid/backup -type d \
       -exec setfacl -m d:u:pidor1:rwx,d:u:pidor2:rwx {} +; then
-    ok 'Доступ pidor1 и pidor2 к данным Zomboid настроен'
+    ok 'Доступ pidor1 и pidor2 к данным Zomboid, import, backup настроен'
 else
     fail 'Настройка ACL для операторов Zomboid'
 fi
@@ -260,15 +281,21 @@ fi
 # Пароль админа: из окружения PZ_ADMIN_PASSWORD или случайный; хранится только у root
 ENV_DIR=/etc/zomboid
 ENV_FILE="$ENV_DIR/zomboid.env"
-install -d -m 700 "$ENV_DIR"
-if [[ -s "$ENV_FILE" ]]; then
-    ok "Пароль админа уже задан ($ENV_FILE), не меняю"
+if run 'Каталог конфигурации админа' install -d -m 700 "$ENV_DIR"; then
+    if [[ -s "$ENV_FILE" ]]; then
+        ok "Пароль админа уже задан ($ENV_FILE), не меняю"
+    else
+        PZ_ADMIN_PASSWORD=${PZ_ADMIN_PASSWORD:-$(python3 -c 'import secrets; print(secrets.token_hex(12))')}
+        if install -m 600 /dev/null "$ENV_FILE" \
+           && printf 'PZ_ADMIN_PASSWORD=%s\n' "$PZ_ADMIN_PASSWORD" > "$ENV_FILE"; then
+            ok "Пароль админа сохранён в $ENV_FILE (chmod 600)"
+        else
+            fail "Пароль админа не сохранён в $ENV_FILE"
+        fi
+        unset PZ_ADMIN_PASSWORD
+    fi
 else
-    PZ_ADMIN_PASSWORD=${PZ_ADMIN_PASSWORD:-$(python3 -c 'import secrets; print(secrets.token_hex(12))')}
-    install -m 600 /dev/null "$ENV_FILE"
-    printf 'PZ_ADMIN_PASSWORD=%s\n' "$PZ_ADMIN_PASSWORD" > "$ENV_FILE"
-    unset PZ_ADMIN_PASSWORD
-    ok "Пароль админа сохранён в $ENV_FILE (chmod 600)"
+    skip 'Запись пароля админа: каталог конфигурации недоступен'
 fi
 
 if cat > /etc/systemd/system/zomboid.service <<'EOF'
