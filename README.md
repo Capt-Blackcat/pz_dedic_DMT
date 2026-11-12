@@ -40,13 +40,13 @@ sudo python3 /tmp/pz_import.py --name ivent --replace-saves
 curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_dedic_DMT/refs/heads/main/pz_export.py -o /tmp/pz_export.py && sudo python3 /tmp/pz_export.py --name ivent
 ```
 ---
+# Запуск
 
 ### При наличии Viewpoint перед первым запуском выполнить:
 ```bash
 sudo curl -fL https://github.com/zed-0xff/ZombieBuddy/releases/download/v2.3.4/ZombieBuddy.jar -o /home/zomboid/pzserver/ZombieBuddy.jar && sudo chown zomboid:zomboid /home/zomboid/pzserver/ZombieBuddy.jar && sudo chmod 644 /home/zomboid/pzserver/ZombieBuddy.jar && sudo python3 -c 'import json,pathlib,shutil,os; p=pathlib.Path("/home/zomboid/pzserver/ProjectZomboid64.json"); d=json.loads(p.read_text()); a=d["vmArgs"]; assert isinstance(a,list), "vmArgs must be a list"; agent="-javaagent:ZombieBuddy.jar"; a.append(agent) if agent not in a else None; b=p.with_name(p.name+".before-zombiebuddy"); shutil.copy2(p,b) if not b.exists() else None; t=p.with_name(p.name+".tmp-zombiebuddy"); t.write_text(json.dumps(d,ensure_ascii=False,indent=2)+"\n"); os.chmod(t,p.stat().st_mode); os.chown(t,p.stat().st_uid,p.stat().st_gid); os.replace(t,p)'
 ```
 
-# Запуск
 ### Первичный запуск сервера PZ (деплой или свежий импорт):
 ```
 curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_dedic_DMT/refs/heads/main/pz_start.py -o /tmp/pz_start.py && sudo python3 /tmp/pz_start.py --name ivent
