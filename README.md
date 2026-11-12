@@ -1,13 +1,13 @@
 # Project Zomboid Dedicated: deploy / import / export
 Три скрипта: `deploy_zomboid.sh` (установка VPS), `pz_import.py` (восстановление/перенос мира), `pz_export.py` (бэкап мира). Примеры ниже для сервера ivent: замени имя на своё. Все команды запускаются через sudo.
 Быстрый запуск через GitHub
-Команды предполагают, что все три файла загружены в корень ветки main репозитория `Capt-Blackcat/pz_deploy_script_DMT`.
+Команды предполагают, что все три файла загружены в корень ветки main репозитория `Capt-Blackcat/pz_dedic_DMT`.
 
 ### Деплой VPS в поле `Post-install скрипт` при заказе:
 ```
 #!/bin/sh
 apt-get update && apt-get install -y curl
-curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_deploy_script_DMT/refs/heads/main/deploy_zomboid.sh -o /tmp/deploy_zomboid.sh && bash /tmp/deploy_zomboid.sh
+curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_dedic_DMT/refs/heads/main/deploy_zomboid.sh -o /tmp/deploy_zomboid.sh && bash /tmp/deploy_zomboid.sh
 ```
 ---
 # 1. Сразу после завершения деплоя обязательно проверь результат отдельной командой:
@@ -20,21 +20,21 @@ sudo tail -n 60 /root/deploy.log
 # 2. Импорт / восстановление мира:
 Cначала загрузить архив через WinSCP в /home/zomboid/import/ (там должен быть ровно один архив), затем:
 ```
-curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_deploy_script_DMT/refs/heads/main/pz_import.py -o /tmp/pz_import.py && sudo python3 /tmp/pz_import.py --name ivent
+curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_dedic_DMT/refs/heads/main/pz_import.py -o /tmp/pz_import.py && sudo python3 /tmp/pz_import.py --name ivent
 ```
 Имя --name должно совпадать с именем мира внутри архива (ivent.ini, ivent.db, Multiplayer/ivent). Название архива может содержать дату, например `ivent_2026-11-11_14-30-00.tar.gz`.
 
 ---
 # 3. Экспорт мира в бэкап:
 ```
-curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_deploy_script_DMT/refs/heads/main/pz_export.py -o /tmp/pz_export.py && sudo python3 /tmp/pz_export.py --name ivent
+curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_dedic_DMT/refs/heads/main/pz_export.py -o /tmp/pz_export.py && sudo python3 /tmp/pz_export.py --name ivent
 ```
 ---
 
 # Запуск
 ### Первичный запуск сервера PZ (деплой или свежий импорт):
 ```
-curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_deploy_script_DMT/refs/heads/main/pz_start.py -o /tmp/pz_start.py && sudo python3 /tmp/pz_start.py --name ivent
+curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_dedic_DMT/refs/heads/main/pz_start.py -o /tmp/pz_start.py && sudo python3 /tmp/pz_start.py --name ivent
 ```
 
 ### Последующие запуски:
