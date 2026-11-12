@@ -34,7 +34,7 @@ curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_deploy_script_DMT/
 # Запуск
 ### Первичный запуск сервера PZ (деплой или свежий импорт):
 ```
-curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_deploy_script_DMT/refs/heads/beta.1/pz_start.py -o /tmp/pz_start.py && sudo python3 /tmp/pz_start.py --name ivent
+curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_deploy_script_DMT/refs/heads/main/pz_start.py -o /tmp/pz_start.py && sudo python3 /tmp/pz_start.py --name ivent
 ```
 
 ### Последующие запуски:
