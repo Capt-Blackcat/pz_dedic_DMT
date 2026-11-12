@@ -346,7 +346,7 @@ def permissions(name: str, paths: list[Path] | None = None) -> None:
         if directory.is_dir():
             run(['setfacl', '-m', 'u:pidor1:rwx,u:pidor2:rwx,u:zomboid:rwx,m::rwx', str(directory)])
             run(['setfacl', '-m', 'd:u:pidor1:rwx,d:u:pidor2:rwx,d:u:zomboid:rwx,d:m::rwx', str(directory)])
-    run(['setfacl', '-m', 'u:pidor1:--x,u:pidor2:--x', str(HOME)])
+    run(['setfacl', '-m', 'u:pidor1:r-x,u:pidor2:r-x', str(HOME)])
     run(['setfacl', '-m', 'u:pidor1:rwx,u:pidor2:rwx,u:zomboid:rwx,m::rwx', str(DATA)])
 
 
