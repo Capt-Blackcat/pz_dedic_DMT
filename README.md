@@ -41,6 +41,11 @@ curl -fsSL https://raw.githubusercontent.com/Capt-Blackcat/pz_dedic_DMT/refs/hea
 ```
 ---
 
+### При наличии Viewpoint перед первым запуском выполнить:
+```bash
+sudo curl -fL https://github.com/zed-0xff/ZombieBuddy/releases/download/v2.3.4/ZombieBuddy.jar -o /home/zomboid/pzserver/ZombieBuddy.jar && sudo chown zomboid:zomboid /home/zomboid/pzserver/ZombieBuddy.jar && sudo chmod 644 /home/zomboid/pzserver/ZombieBuddy.jar
+```
+
 # Запуск
 ### Первичный запуск сервера PZ (деплой или свежий импорт):
 ```
